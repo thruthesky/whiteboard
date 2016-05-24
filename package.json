@@ -1,0 +1,14 @@
+{
+  "name": "whiteboardserver",
+  "version": "0.0.1",
+  "description": "White Board Node Server.",
+  "main": "server.js",
+  "repository": "https://github.com/thruthesky/whiteboard",
+  "author": "JaeHo Song <thruthesky@gmail.com>",
+  "dependencies": {
+    "async": "~0.2.8",
+    "express": "~3.2.4",
+    "socket.io": "^1.4.5",
+    "util" : "*"
+  }
+}

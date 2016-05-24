@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en" ng-app>
+<head>
+    <title>Chat Example</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            padding-top: 2em;
+        }
+        section.room-list { padding: 1em; background-color: #dfdfdf;}
+        section.room-list .content { }
+        section.room-list .content > div { margin: .4em 0; padding: .6em; background-color: #efefef; cursor: pointer; }
+        section.room-list .content .users { padding-left: 1em; font-size: 80%; }
+
+
+
+        .chat { float: left; margin: .2em .3em .2em 0; width: 14em; background-color: #eaf0ff; }
+        .chat .title { padding: .4em; background-color: #7f7f7f; color: white; }
+        .chat .messages { min-height: 14em; }
+        .chat input { margin: 0; padding: .4em; box-sizing: border-box; width: 100%; }
+
+
+
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/jquery-2.2.3.min.js"></script>
+    <script src="js/underscore-min.js"></script>
+    <script src="js/underscore.string.min.js"></script>
+    <script src="js/js.cookie.js"></script>
+
+    <script>
+
+
+        var socket = io.connect();
+
+
+        socket.on('connect', function () {
+            console.log('Connected ...');
+
+
+            el.roomname().val('Music');
+            $('button.join-room').click();
+            app.initUsername();
+
+        });
+        socket.on( 'disconnect', function() {
+            console.log('Dis-connected ...');
+        } );
+        socket.on( 'reconnect', function() {
+            console.log('Re-connected ...');
+
+
+            el.roomname().val('Music');
+            $('button.join-room').click();
+            app.initUsername();
+        } );
+
+
+        socket.on ('recv-message', function(roomname, text) {
+            console.log('recv-message: ');
+            app.recvMessage( roomname, text );
+        });
+
+
+        var el = {};
+        el.username = function () { return $('[name="username"]'); };
+        el.roomname = function () { return $('[name="roomname"]'); };
+        el.room = function (roomname) { return $('.chat').find('[roomname="'+roomname+'"]').parents('section'); };
+
+        var app = {};
+        app.messages = [];
+        app.roster = [];
+        app.name = '';
+        app.text = '';
+        app.setUsername = function ( username ) {
+            socket.emit( 'set-username', username, function(extra) {
+                console.log('username set:', extra);
+                Cookies.set('username', extra.username);
+                el.username().val( extra.username );
+            });
+        };
+
+        app.getUsername = function () {
+            var username = Cookies.get('username');
+            return !!username ? username : el.username().val();
+        };
+
+        app.initUsername = function() {
+            var username = Cookies.get('username');
+            app.setUsername( username );
+        };
+        app.userList = function( callback ) {
+            socket.emit('user-list', callback);
+        };
+
+        app.roomList = function (callback) {
+            socket.emit('room-list', callback);
+        };
+
+        app.joinRoom = function (roomname, callback) {
+            socket.emit('join-room', roomname, callback);
+        };
+
+        app.joinRoomDone = function ( roomname ) {
+            $("<section class='chat'>" +
+                    "<form>" +
+                    "   <div class='title' roomname='"+roomname+"'>"+roomname+"</div>" +
+                    "   <div class='messages'></div>" +
+                    "   <div class='input'><input type='text'></div>" +
+                    "</form>" +
+                    "</section>"
+            ).appendTo('body');
+        };
+        app.sendMessage = function (username, room, text, callback) {
+            socket.emit('send-message', {
+                username: username,
+                room: room,
+                text: text
+            }, callback);
+        };
+
+
+
+        app.recvMessage = function ( data ) {
+            console.log('recvMessage() : ', data);
+            var $room = el.room( data.room );
+            $room.find('.messages').append('<div class="message">'+ data.username + ':' + data.text+'</div>');
+        };
+
+
+
+
+        $(function(){
+
+            app.initUsername();
+
+            $('button.update-username').click(function(){
+                var username = $('[name="username"]').val();
+                if ( username ) app.setUsername( username );
+                else alert('Input your name');
+            });
+
+            $('button.user-list').click(function(){
+                app.userList(function(userList){
+                    console.log('-- user list --', userList);
+
+                });
+            });
+
+            $('button.join-room').click(function() {
+                var roomname = $('[name="roomname"]').val();
+                console.log('connecting room : ' + roomname);
+                app.joinRoom(roomname, app.joinRoomDone);
+            });
+            $('button.room-list').click(function(){
+                app.roomList(function(roomList){
+                    console.log(roomList);
+                });
+            });
+
+
+            var $body = $('body');
+            $body.on('click', '.room-list .room .name', function() {
+                app.joinRoom( $(this).text(), app.joinRoomDone);
+            });
+
+
+            $body.on('submit', '.chat form', function( e ) {
+                e.preventDefault();
+                var $form = $(this);
+                var $input = $form.find('input');
+                var roomname = $form.find('.title').text();
+
+                var text = $input.val();
+                console.log("You are sending message to : " + roomname, text );
+
+                $input.val('');
+
+                app.sendMessage( app.getUsername(), roomname, text, function( re ) {
+                    console.log( re );
+                });
+            });
+
+
+        });
+
+        /*
+         socket.on('message', function (msg) {
+         app.messages.push(msg);
+         });
+
+         socket.on('roster', function (names) {
+         app.roster = names;
+         });
+
+         app.send = function send() {
+         console.log('Sending message:', app.text);
+         socket.emit('message', app.text);
+         app.text = '';
+         };
+         */
+
+
+
+        ( function getRoomListLoop() {
+            app.roomList(function(roomList){
+                //console.log(roomList);
+                var m = '';
+                for ( var i in roomList ) {
+                    var users = '';
+                    var room = roomList[i];
+
+                    for( var u in room ) {
+                        var extra = room[u];
+                        users += extra.username + ' ';
+                    }
+                    m += '<div class="room"><span class="name">' + i + '</span><span class="users">'+users+'</span></div>';
+
+                }
+                $('section.room-list .content').html( m );
+            });
+            setTimeout(getRoomListLoop, 1000);
+        })();
+
+    </script>
+</head>
+<body>
+
+<div>
+    <button class="user-list">User List</button>
+    <button class="room-list">Room List</button>
+</div>
+<div>User Name : <input type="text" name="username" size="10" placeholder="Input your name"><button class="update-username">Update</button></div>
+<div>Room Name : <input type="text" name="roomname" size="10" placeholder="Input room name"><button class="join-room">Join Room</button></div>
+
+
+
+<section class="room-list">
+    <h2>Room List</h2>
+    <div class="content"></div>
+</section>
+
+
+</body>
+</html>
